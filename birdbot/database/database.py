@@ -10,7 +10,7 @@ class Database:
         user = os.environ.get("MYSQL_USER")
         password = os.environ.get("MYSQL_PASSWORD")
 
-        self.engine = create_engine(f"mysql+pymysql://{user}:{password}@{host}/{database}")
+        self.engine = create_engine(f"mysql+pymysql://{user}:{password}@{host}/{database}", pool_pre_ping=True)
 
     def get_recent_observations(self, since: timedelta=timedelta(days=1)) -> pd.DataFrame:
         start_time = datetime.now() - since
@@ -29,4 +29,5 @@ class Database:
             WHERE begin_time >= %s
         """
 
-        return pd.read_sql(query, self.engine, params=(start_time,))
+        with self.engine.connect() as conn:
+            return pd.read_sql(query, conn, params=(start_time,))

@@ -44,22 +44,18 @@ def split_message(message: str, max_length: int = 2000) -> list[str]:
     return chunks
 
 
-async def send_daily_aggregate(bot: discord.Client, db: Database) -> None:
+def build_aggregate_report(db: Database) -> str:
     min_observations = 5
     min_confidence = 0.6
 
     df = db.get_recent_observations()
+    print(f"[report] total rows from DB: {len(df)}")
 
     df = df[df['confidence'] >= min_confidence]
-
+    print(f"[report] rows after confidence filter (>={min_confidence}): {len(df)}")
 
     df['time_of_day'] = df['begin_time'].dt.hour.map(get_time_of_day)
     time_order = ['Morning', 'Mid-day', 'Afternoon', 'Evening', 'Night']
-
-    # df['am_pm'] = df['begin_time'].dt.hour.map(get_am_pm)
-    # am_pm_order = ['AM', 'PM']
-    # cat_type = CategoricalDtype(categories=am_pm_order, ordered=True)
-    # df['am_pm'] = df['am_pm'].astype(cat_type)
 
     grouped = df.groupby(['source_node', 'common_name', 'scientific_name']).agg(
         observations=('id', 'count'),
@@ -68,6 +64,7 @@ async def send_daily_aggregate(bot: discord.Client, db: Database) -> None:
     ).reset_index()
 
     grouped = grouped[grouped['observations'] >= min_observations]
+    print(f"[report] species groups after min_observations filter (>={min_observations}): {len(grouped)}")
 
     grouped = grouped.sort_values(
         by=['source_node', 'observations'],
@@ -87,11 +84,13 @@ async def send_daily_aggregate(bot: discord.Client, db: Database) -> None:
                 f" `seen: {', '.join(row['times_seen'])}`\n"
             )
 
-    message = '\n'.join(lines)
+    return '\n'.join(lines)
 
+
+async def send_daily_aggregate(bot: discord.Client, db: Database) -> None:
+    message = build_aggregate_report(db)
     channel = bot.get_channel(int(os.environ.get("UPDATE_CHANNEL_ID")))
-    chunks = split_message(message)
-    for chunk in chunks:
+    for chunk in split_message(message):
         await channel.send(chunk)
 
 
@@ -121,9 +120,12 @@ class AggregatorCog(commands.Cog):
 
     @app_commands.command(name="report", description="Post the daily BirdNET report immediately")
     async def report_command(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Generating report...", ephemeral=True)
-        await send_daily_aggregate(self.bot, self.db)
-        await interaction.edit_original_response(content="Report posted.")
+        await interaction.response.defer()
+        message = build_aggregate_report(self.db)
+        chunks = split_message(message)
+        await interaction.followup.send(chunks[0])
+        for chunk in chunks[1:]:
+            await interaction.channel.send(chunk)
 
 
 async def setup(bot: commands.Bot):

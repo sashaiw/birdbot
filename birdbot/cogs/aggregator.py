@@ -8,8 +8,6 @@ import os
 from birdbot.database import Database
 
 import pandas as pd
-from pandas.api.types import CategoricalDtype
-
 
 def get_time_of_day(hour: int) -> str:
     if 5 <= hour < 10:
@@ -57,8 +55,6 @@ async def send_daily_aggregate(bot: discord.Client, db: Database) -> None:
 
     df['time_of_day'] = df['begin_time'].dt.hour.map(get_time_of_day)
     time_order = ['Morning', 'Mid-day', 'Afternoon', 'Evening', 'Night']
-    cat_type = CategoricalDtype(categories=time_order, ordered=True)
-    df['time_of_day'] = df['time_of_day'].astype(cat_type)
 
     # df['am_pm'] = df['begin_time'].dt.hour.map(get_am_pm)
     # am_pm_order = ['AM', 'PM']

@@ -66,6 +66,9 @@ def build_aggregate_report(db: Database) -> str:
     grouped = grouped[grouped['observations'] >= min_observations]
     print(f"[report] species groups after min_observations filter (>={min_observations}): {len(grouped)}", flush=True)
 
+    if grouped.empty:
+        return "no birds :("
+
     grouped = grouped.sort_values(
         by=['source_node', 'observations'],
         ascending=[False, False]

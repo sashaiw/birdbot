@@ -14,8 +14,10 @@ def build_bot() -> hikari.GatewayBot:
 
 
 def make_client(bot: hikari.GatewayBot) -> tanjun.Client:
+    guild_id = os.environ.get("TESTING_GUILD_ID")
     client = tanjun.Client.from_gateway_bot(
         bot,
+        declare_global_commands=int(guild_id) if guild_id else True,
     )
 
     db = Database()

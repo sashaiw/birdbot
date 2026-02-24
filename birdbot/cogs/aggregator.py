@@ -45,7 +45,7 @@ def split_message(message: str, max_length: int = 2000) -> list[str]:
 
 
 def build_aggregate_report(db: Database) -> str:
-    min_observations = 5
+    min_observations = 1
     min_confidence = 0.6
 
     df = db.get_recent_observations()

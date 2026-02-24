@@ -49,10 +49,10 @@ def build_aggregate_report(db: Database) -> str:
     min_confidence = 0.6
 
     df = db.get_recent_observations()
-    print(f"[report] total rows from DB: {len(df)}")
+    print(f"[report] total rows from DB: {len(df)}", flush=True)
 
     df = df[df['confidence'] >= min_confidence]
-    print(f"[report] rows after confidence filter (>={min_confidence}): {len(df)}")
+    print(f"[report] rows after confidence filter (>={min_confidence}): {len(df)}", flush=True)
 
     df['time_of_day'] = df['begin_time'].dt.hour.map(get_time_of_day)
     time_order = ['Morning', 'Mid-day', 'Afternoon', 'Evening', 'Night']
@@ -64,7 +64,7 @@ def build_aggregate_report(db: Database) -> str:
     ).reset_index()
 
     grouped = grouped[grouped['observations'] >= min_observations]
-    print(f"[report] species groups after min_observations filter (>={min_observations}): {len(grouped)}")
+    print(f"[report] species groups after min_observations filter (>={min_observations}): {len(grouped)}", flush=True)
 
     grouped = grouped.sort_values(
         by=['source_node', 'observations'],

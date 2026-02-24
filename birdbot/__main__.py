@@ -1,5 +1,5 @@
-import hikari
-from birdbot.bot import build_bot
+import os
+from birdbot.bot import BirdBot
 
 
 # if os.name != "nt":
@@ -7,5 +7,4 @@ from birdbot.bot import build_bot
 #     uvloop.install()
 
 if __name__ == '__main__':
-    bot = build_bot()
-    bot.run()
+    BirdBot().run(os.environ.get('DISCORD_TOKEN'))

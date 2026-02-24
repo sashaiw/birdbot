@@ -1,5 +1,6 @@
-import hikari
-import tanjun
+import discord
+from discord.ext import commands
+from discord import app_commands
 import asyncio
 import datetime
 import os
@@ -9,8 +10,6 @@ from birdbot.database import Database
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-
-component = tanjun.Component()
 
 def get_time_of_day(hour: int) -> str:
     if 5 <= hour < 10:
@@ -46,7 +45,8 @@ def split_message(message: str, max_length: int = 2000) -> list[str]:
 
     return chunks
 
-async def send_daily_aggregate(app: hikari.RESTAware, db: Database) -> None:
+
+async def send_daily_aggregate(bot: discord.Client, db: Database) -> None:
     min_observations = 5
     min_confidence = 0.6
 
@@ -78,8 +78,6 @@ async def send_daily_aggregate(app: hikari.RESTAware, db: Database) -> None:
         ascending=[False, False]
     )
 
-    # await app.rest.create_message(channel=int(os.environ.get("UPDATE_CHANNEL_ID")), content=str(grouped)[0:1999])
-
     lines = ['>>> # 🐦 Daily BirdNET report']
 
     for source_node in grouped['source_node'].unique():
@@ -88,31 +86,34 @@ async def send_daily_aggregate(app: hikari.RESTAware, db: Database) -> None:
 
         for _, row in source_data.iterrows():
             lines.append(
-                # f"**{row['common_name']}** (*{row['scientific_name']}*)\n"
-                # f"    Observations: {row['observations']}\n"
-                # f"    Average confidence: {round(row['avg_confidence'] * 100):d}%\n"
-                # f"    Seen: {', '.join(row['times_seen'])}"
                 f"**{row['common_name']}** (*{row['scientific_name']}*)\n"
                 f"-#\t`n={row['observations']}` `conf={round(row['avg_confidence'] * 100):d}%`"
                 f" `seen: {', '.join(row['times_seen'])}`\n"
             )
 
-        # embed.add_field(name=f"Node: {source_node}", value='\n'.join(lines), inline=True)
-
-    # print('\n'.join(lines))
-
     message = '\n'.join(lines)
 
+    channel = bot.get_channel(int(os.environ.get("UPDATE_CHANNEL_ID")))
     chunks = split_message(message)
     for chunk in chunks:
-        await app.rest.create_message(
-            channel=int(os.environ.get("UPDATE_CHANNEL_ID")),
-            content=chunk)
+        await channel.send(chunk)
 
 
-@component.with_listener(hikari.StartedEvent)
-async def on_startup(event: hikari.StartedEvent, db: Database = tanjun.inject(type=Database)) -> None:
-    async def aggregate_scheduler():
+class AggregatorCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self.db = bot.db
+        self._scheduler_task: asyncio.Task | None = None
+
+    async def cog_load(self):
+        self._scheduler_task = asyncio.create_task(self._aggregate_scheduler())
+
+    async def cog_unload(self):
+        if self._scheduler_task:
+            self._scheduler_task.cancel()
+
+    async def _aggregate_scheduler(self):
+        await self.bot.wait_until_ready()
         while True:
             now = datetime.datetime.now()
             target = now.replace(hour=22, minute=0, second=0, microsecond=0)
@@ -120,22 +121,14 @@ async def on_startup(event: hikari.StartedEvent, db: Database = tanjun.inject(ty
                 target += datetime.timedelta(days=1)
             await asyncio.sleep((target - now).total_seconds())
 
-            await send_daily_aggregate(event.app, db)
+            await send_daily_aggregate(self.bot, self.db)
 
-    asyncio.create_task(aggregate_scheduler())
-    # await send_daily_aggregate(event.app, db)
+    @app_commands.command(name="report", description="Post the daily BirdNET report immediately")
+    async def report_command(self, interaction: discord.Interaction):
+        await interaction.response.send_message("Generating report...", ephemeral=True)
+        await send_daily_aggregate(self.bot, self.db)
+        await interaction.edit_original_response(content="Report posted.")
 
 
-@component.with_slash_command
-@tanjun.as_slash_command("report", "Post the daily BirdNET report immediately")
-async def report_command(
-    ctx: tanjun.abc.SlashContext,
-    db: Database = tanjun.inject(type=Database),
-) -> None:
-    await ctx.respond("Generating report...", flags=hikari.MessageFlag.EPHEMERAL)
-    await send_daily_aggregate(ctx.client.rest, db)
-    await ctx.edit_last_response("Report posted.")
-
-@tanjun.as_loader
-def load_component(client: tanjun.Client) -> None:
-    client.add_component(component)
+async def setup(bot: commands.Bot):
+    await bot.add_cog(AggregatorCog(bot))

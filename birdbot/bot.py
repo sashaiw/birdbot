@@ -1,28 +1,23 @@
-import hikari
-import tanjun
+import discord
+from discord.ext import commands
 import os
 from birdbot.database import Database
 
-def build_bot() -> hikari.GatewayBot:
-    token = os.environ.get('DISCORD_TOKEN')
-    print(f'TOKEN: {os.environ}')
-    bot = hikari.GatewayBot(token)
 
-    make_client(bot)
+class BirdBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        super().__init__(command_prefix="!", intents=intents)
+        self.db = Database()
+        testing_guild_id = os.environ.get("TESTING_GUILD_ID")
+        self.testing_guild = discord.Object(id=int(testing_guild_id)) if testing_guild_id else None
 
-    return bot
+    async def setup_hook(self):
+        await self.load_extension('birdbot.cogs.aggregator')
+        if self.testing_guild:
+            self.tree.copy_global_to(guild=self.testing_guild)
+            await self.tree.sync(guild=self.testing_guild)
+        else:
+            await self.tree.sync()
 
 
-def make_client(bot: hikari.GatewayBot) -> tanjun.Client:
-    guild_id = os.environ.get("TESTING_GUILD_ID")
-    client = tanjun.Client.from_gateway_bot(
-        bot,
-        declare_global_commands=int(guild_id) if guild_id else True,
-    )
-
-    db = Database()
-    client.set_type_dependency(Database, db)
-
-    client.load_modules('birdbot.modules.aggregator')
-
-    return client
